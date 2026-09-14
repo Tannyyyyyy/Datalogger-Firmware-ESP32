@@ -76,6 +76,40 @@ int main()
     assert(!signalFits(be32, 3));
     assert(extractRaw(data, 4, be32) == 0x1234ABCD);
 
+    // --- display a2101.dbc layouts (mirrors SIGNAL_TABLE) -------------------
+    // VCU_GW_0 0xA2100: speed=60, power raw 0x8000 -> 0 kW, temps 80-40=40,
+    // batt_voltage 400, byte 7 = 0b00001110 -> warning 1, fault 1, state 2.
+    const uint8_t gw0[8] = { 0x3C, 0x00, 0x80, 0x50, 0x50, 0x90, 0x01, 0x0E };
+    SignalDef sp   = { "speed",         0xA2100, true,  0,  8, SIG_INTEL,    true,  1.0f,     0.0f, "" };
+    SignalDef pw   = { "power",         0xA2100, true,  8, 16, SIG_INTEL,    true,  1.0f, 32768.0f, "" };
+    SignalDef bt1  = { "batt_temp_1",   0xA2100, true, 31,  8, SIG_MOTOROLA, true,  1.0f,   -40.0f, "" };
+    SignalDef mcut = { "mcu_temp",      0xA2100, true, 39,  8, SIG_MOTOROLA, true,  1.0f,   -40.0f, "" };
+    SignalDef bv   = { "batt_voltage",  0xA2100, true, 40, 16, SIG_INTEL,    true,  1.0f,     0.0f, "" };
+    SignalDef vs   = { "vehicle_state", 0xA2100, true, 57,  2, SIG_MOTOROLA, false, 1.0f,     0.0f, "" };
+    SignalDef flt  = { "fault",         0xA2100, true, 58,  1, SIG_MOTOROLA, false, 1.0f,     0.0f, "" };
+    SignalDef wrn  = { "warning",       0xA2100, true, 59,  1, SIG_MOTOROLA, false, 1.0f,     0.0f, "" };
+    assert(near(applyScale(extractRaw(gw0, 8, sp),   sp),    60.0f));
+    assert(near(applyScale(extractRaw(gw0, 8, pw),   pw),     0.0f));
+    assert(near(applyScale(extractRaw(gw0, 8, bt1),  bt1),   40.0f));
+    assert(near(applyScale(extractRaw(gw0, 8, mcut), mcut),  40.0f));
+    assert(near(applyScale(extractRaw(gw0, 8, bv),   bv),   400.0f));
+    assert(near(applyScale(extractRaw(gw0, 8, vs),   vs),     2.0f));
+    assert(near(applyScale(extractRaw(gw0, 8, flt),  flt),    1.0f));
+    assert(near(applyScale(extractRaw(gw0, 8, wrn),  wrn),    1.0f));
+
+    // VCU_GW_1 0xA2101, DLC 5: odo 123456 km, gear 3 (high nibble), mode 2, soc 85.
+    const uint8_t gw1[5] = { 0x40, 0xE2, 0x01, 0x32, 0x55 };
+    SignalDef odo = { "distance_total", 0xA2101, true,  0, 24, SIG_INTEL,    true,  1.0f, 0.0f, "" };
+    SignalDef dm  = { "drive_mode",     0xA2101, true, 27,  4, SIG_MOTOROLA, false, 1.0f, 0.0f, "" };
+    SignalDef cg  = { "current_gear",   0xA2101, true, 31,  4, SIG_MOTOROLA, false, 1.0f, 0.0f, "" };
+    SignalDef soc = { "soc",            0xA2101, true, 39,  8, SIG_MOTOROLA, true,  1.0f, 0.0f, "" };
+    assert(signalFits(soc, 5));
+    assert(!signalFits(soc, 4));
+    assert(near(applyScale(extractRaw(gw1, 5, odo), odo), 123456.0f));
+    assert(near(applyScale(extractRaw(gw1, 5, dm),  dm),       2.0f));
+    assert(near(applyScale(extractRaw(gw1, 5, cg),  cg),       3.0f));
+    assert(near(applyScale(extractRaw(gw1, 5, soc), soc),     85.0f));
+
     std::printf("all decoder checks passed\n");
     return 0;
 }

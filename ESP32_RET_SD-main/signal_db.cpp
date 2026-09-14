@@ -13,30 +13,32 @@ SignalDB signalDB;
 // ===========================================================================
 //                          >>> EDIT THIS TABLE <<<
 // ===========================================================================
-// These rows are PLACEHOLDERS. Replace them with the signals from your own DBC
-// or from whatever you reverse-engineered in SavvyCAN. Nothing else in the
-// firmware needs to change - the decoder, the JSON payload, and the console all
-// derive from this table.
+// Generated from "display a2101.dbc" (VCU_GW_0 / VCU_GW_1). The DBC ids
+// 2148147456/2148147457 carry the 0x80000000 extended flag, so the arbitration
+// ids are 0xA2100 / 0xA2101 with extended = true. Nothing else in the firmware
+// needs to change - the decoder, the JSON payload, and the console all derive
+// from this table.
 //
 //   name          id     ext  start  len  endian        signed  scale     offset  unit
 // ---------------------------------------------------------------------------
 const SignalDef SIGNAL_TABLE[] = {
-    // --- Example: engine data, big-endian, typical of OEM powertrain frames ---
-    { "rpm",        0x0C4, false,  7,  16, SIG_MOTOROLA, false,  0.25f,     0.0f,  "rpm"  },
-    { "speed",      0x0C4, false, 23,  16, SIG_MOTOROLA, false,  0.01f,     0.0f,  "km/h" },
-    { "throttle",   0x0C4, false, 39,   8, SIG_MOTOROLA, false,  0.392157f, 0.0f,  "%"    },
+    // --- VCU_GW_0, id 2148147456 = 0xA2100 extended, DLC 8 ---
+    { "speed",          0xA2100, true,   0,   8, SIG_INTEL,    true,  1.0f,      0.0f, "km/h" },
+    { "power",          0xA2100, true,   8,  16, SIG_INTEL,    true,  1.0f,  32768.0f, "kW"   },
+    { "batt_temp_1",    0xA2100, true,  31,   8, SIG_MOTOROLA, true,  1.0f,    -40.0f, "degC" },
+    { "mcu_temp",       0xA2100, true,  39,   8, SIG_MOTOROLA, true,  1.0f,    -40.0f, "degC" },
+    { "batt_voltage",   0xA2100, true,  40,  16, SIG_INTEL,    true,  1.0f,      0.0f, "V"    },
+    // The DBC marks these three as signed; they are enums/flags, so they are
+    // decoded unsigned - signed would turn "fault set" into -1 and state 2 into -2.
+    { "vehicle_state",  0xA2100, true,  57,   2, SIG_MOTOROLA, false, 1.0f,      0.0f, ""     },
+    { "fault",          0xA2100, true,  58,   1, SIG_MOTOROLA, false, 1.0f,      0.0f, ""     },
+    { "warning",        0xA2100, true,  59,   1, SIG_MOTOROLA, false, 1.0f,      0.0f, ""     },
 
-    // --- Example: temperatures, note the classic -40 offset ---
-    { "coolant",    0x1D0, false,  7,   8, SIG_MOTOROLA, false,  1.0f,    -40.0f,  "degC" },
-    { "intakeAir",  0x1D0, false, 15,   8, SIG_MOTOROLA, false,  1.0f,    -40.0f,  "degC" },
-
-    // --- Example: little-endian battery frame with a signed current ---
-    { "packVolt",   0x200, false,  0,  16, SIG_INTEL,    false,  0.01f,     0.0f,  "V"    },
-    { "packAmp",    0x200, false, 16,  16, SIG_INTEL,    true,   0.1f,      0.0f,  "A"    },
-    { "soc",        0x200, false, 32,   8, SIG_INTEL,    false,  0.5f,      0.0f,  "%"    },
-
-    // --- Example: a single status bit ---
-    { "brakeOn",    0x224, false,  0,   1, SIG_INTEL,    false,  1.0f,      0.0f,  ""     },
+    // --- VCU_GW_1, id 2148147457 = 0xA2101 extended, DLC 5 ---
+    { "distance_total", 0xA2101, true,   0,  24, SIG_INTEL,    true,  1.0f,      0.0f, "km"   },
+    { "drive_mode",     0xA2101, true,  27,   4, SIG_MOTOROLA, false, 1.0f,      0.0f, ""     },
+    { "current_gear",   0xA2101, true,  31,   4, SIG_MOTOROLA, false, 1.0f,      0.0f, ""     },
+    { "soc",            0xA2101, true,  39,   8, SIG_MOTOROLA, true,  1.0f,      0.0f, "%"    },
 };
 
 const size_t SIGNAL_TABLE_LEN = sizeof(SIGNAL_TABLE) / sizeof(SIGNAL_TABLE[0]);
@@ -194,10 +196,10 @@ void SignalDB::dumpToSerial()
     for (size_t i = 0; i < n; i++) {
         const SignalDef &d = SIGNAL_TABLE[i];
         if (!snap[i].everSeen) {
-            Serial.printf("  %-18s 0x%03X   %-12s %-6s %s\n",
+            Serial.printf("  %-18s 0x%-7X   %-12s %-6s %s\n",
                           d.name, (unsigned)d.canId, "--", d.unit, "never seen");
         } else {
-            Serial.printf("  %-18s 0x%03X   %-12.3f %-6s %lu\n",
+            Serial.printf("  %-18s 0x%-7X   %-12.3f %-6s %lu\n",
                           d.name, (unsigned)d.canId, snap[i].value, d.unit,
                           (unsigned long)(millis() - snap[i].lastUpdateMs));
         }
