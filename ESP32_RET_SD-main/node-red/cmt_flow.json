@@ -1,0 +1,103 @@
+[
+  {
+    "id": "cmt_tab",
+    "type": "tab",
+    "label": "CMT telemetry",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "cmt_broker",
+    "type": "mqtt-broker",
+    "name": "vehicle broker",
+    "broker": "192.168.1.100",
+    "port": "1883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "birthTopic": "",
+    "closeTopic": "",
+    "willTopic": "",
+    "sessionExpiry": ""
+  },
+  {
+    "id": "cmt_in",
+    "type": "mqtt in",
+    "z": "cmt_tab",
+    "name": "vehicle/+/+",
+    "topic": "vehicle/+/+",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "cmt_broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 140,
+    "y": 120,
+    "wires": [
+      [
+        "cmt_map"
+      ]
+    ]
+  },
+  {
+    "id": "cmt_map",
+    "type": "function",
+    "z": "cmt_tab",
+    "name": "map to cmt/*",
+    "func": "// ---- calibrate per vehicle -------------------------------------------------\nconst PACK_KWH     = 5.0;   // usable pack energy, for rangeKm\nconst FALLBACK_WHKM = 60;   // used until the energy meter has a real figure\nconst TEMP_WARN_C  = 45;\nconst TEMP_CRIT_C  = 55;\nconst VEHICLES     = {};    // firmware deviceId -> fleet id; empty = DEFAULT_ID\nconst DEFAULT_ID   = 'CMT-01';\n// ---------------------------------------------------------------------------\n\nconst parts = String(msg.topic || '').split('/');\nconst dev   = parts[1] || 'unknown';\nconst kind  = parts[2];\nconst base  = 'cmt/' + (VEHICLES[dev] || DEFAULT_ID) + '/';\nconst ts    = new Date().toISOString();   // the broker has a clock, the ESP32 does not\nconst p     = msg.payload || {};\n\nif (kind === 'status') {\n    return [[{ topic: base + 'status', retain: true,\n               payload: { online: p.state === 'online' } }]];\n}\nif (kind !== 'data') return null;\n\n// The firmware only sends signals that CHANGED since its last batch, so hold a\n// running picture per device or half the fields vanish from every message.\nconst key = 'cmt:' + dev;\nconst st  = flow.get(key) || { sig: {}, alert: null };\nObject.assign(st.sig, p.sig || {});\n\nconst s   = st.sig;\nconst e   = p.energy || {};\nconst gps = p.gps || {};\nconst out = [];\n\nconst num = v => (typeof v === 'number' && isFinite(v)) ? v : undefined;\nconst put = (o, k, v) => { if (v !== undefined) o[k] = v; };\n\n// --- telemetry -------------------------------------------------------------\nconst t = { ts };\nput(t, 'lat',        num(gps.lat));            // absent until a GPS exists\nput(t, 'lng',        num(gps.lng));\nput(t, 'speedKph',   num(s.speed));\nput(t, 'odometerKm', num(s.distance_total));\nput(t, 'tripKm',     num(e.km));\nput(t, 'motorTempC', num(s.mcu_temp));\nout.push({ topic: base + 'telemetry', payload: t });\n\n// --- battery ---------------------------------------------------------------\nconst b = { ts };\nput(b, 'packVoltage', num(s.batt_voltage));\nput(b, 'totalPct',    num(s.soc));\n\nconst volt = num(s.batt_voltage);\nconst kw   = num(e.kW) !== undefined ? num(e.kW) : num(s.power);\nif (volt > 0 && kw !== undefined) b.packCurrentA = +(kw * 1000 / volt).toFixed(1);\n\nconst whkm = num(e.recent) > 0 ? e.recent\n           : num(e.whPerKm) > 0 ? e.whPerKm\n           : FALLBACK_WHKM;\nif (b.totalPct !== undefined) {\n    b.rangeKm = Math.round(PACK_KWH * 1000 * b.totalPct / 100 / whkm);\n}\n// no per-cell data on this bus; emit the pack as one cell so the shape holds\nif (b.packVoltage !== undefined) {\n    b.cells = [{ id: 1, voltage: b.packVoltage, tempC: num(s.batt_temp_1), pct: b.totalPct }];\n}\nout.push({ topic: base + 'battery', payload: b });\n\n// --- alert (edge-triggered, not once per second) ---------------------------\nconst bt = num(s.batt_temp_1);\nlet al = null;\nif (s.fault) {\n    al = { type: 'fault', severity: 'critical', message: 'VCU fault flag set' };\n} else if (bt !== undefined && bt >= TEMP_WARN_C) {\n    al = { type: 'over_temp',\n           severity: bt >= TEMP_CRIT_C ? 'critical' : 'warning',\n           message: 'Pack at ' + bt.toFixed(1) + 'C' };\n} else if (s.warning) {\n    al = { type: 'warning', severity: 'warning', message: 'VCU warning flag set' };\n}\n\nconst fingerprint = al ? al.type + ':' + al.severity : null;\nif (fingerprint !== st.alert) {\n    st.alert = fingerprint;\n    if (al) out.push({ topic: base + 'alert', payload: Object.assign({ ts }, al) });\n}\n\nflow.set(key, st);\nreturn [out];\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 360,
+    "y": 120,
+    "wires": [
+      [
+        "cmt_out",
+        "cmt_dbg"
+      ]
+    ]
+  },
+  {
+    "id": "cmt_out",
+    "type": "mqtt out",
+    "z": "cmt_tab",
+    "name": "cmt/CMT-01/*",
+    "topic": "",
+    "qos": "1",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "cmt_broker",
+    "x": 600,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "cmt_dbg",
+    "type": "debug",
+    "z": "cmt_tab",
+    "name": "",
+    "active": false,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 600,
+    "y": 160,
+    "wires": []
+  }
+]
