@@ -116,8 +116,8 @@ Wi-Fi hotspot and the ESP32 joins it as a station.
 
 | ESP32 | Transceiver | Notes |
 | --- | --- | --- |
-| GPIO 17 | `D` / `CTX` / TXD | CAN transmit |
-| GPIO 16 | `R` / `CRX` / RXD | CAN receive |
+| GPIO 4 | `D` / `CTX` / TXD | CAN transmit |
+| GPIO 5 | `R` / `CRX` / RXD | CAN receive |
 | 3V3 | `VCC` | **3.3 V only** on the HVD230 |
 | GND | `GND` | common ground |
 | — | `Rs` | tie to GND for high-speed mode |
