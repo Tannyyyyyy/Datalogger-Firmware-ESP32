@@ -313,7 +313,52 @@ Messages arriving with live `imu` values that change when you move the board.
 
 ## Phase 6 — CAN
 
-### On the bench
+### Test the board's own CAN module first
+
+Before you go looking for a second node, prove the hardware on your own board.
+`cantest` puts the controller into no-ACK mode and sends frames with the
+self-reception bit set, so each frame goes out on TX, through the transceiver,
+onto CANH/CANL, back in through the transceiver and arrives on RX. No second
+node, no vehicle.
+
+Fit **one 120 Ω resistor across CANH and CANL** (most transceiver breakouts
+already have one — check before adding a second). Then:
+
+```
+cantest
+```
+
+```
+  CAN self-test: 5 frames at 500000 bps, TX GPIO 17 / RX GPIO 16
+
+  queued 5/5, echoed back 5, corrupt 0
+  tx err 0, rx err 0, tx failed 0, bus errors 0, arb lost 0
+
+  PASS - controller, transceiver and CANH/CANL wiring all work.
+```
+
+This is a real test of the transceiver, not just the ESP32: TWAI compares every
+bit it transmits against what it reads back on RX, so an open loop fails rather
+than silently passing.
+
+`cantest 20` sends more frames. The command refuses to run if frames are already
+arriving, because it transmits and must not be pointed at a live vehicle bus —
+`cantest 5 force` overrides that on a bench rig you own.
+
+**FAIL — nothing came back**, in order of likelihood:
+
+| Check | Detail |
+| --- | --- |
+| Transceiver power | 3.3 V for SN65HVD230, 5 V for TJA1050/MCP2551 |
+| TX/RX swapped | ESP32 TX → transceiver TXD/D, RX → RXD/R |
+| Termination | one 120 Ω across CANH/CANL |
+| Pins | the GPIOs printed must be your board's actual CAN pins |
+| Standby | SN65HVD230 RS pin to GND — a pull-up holds it in standby |
+
+Once this passes, any remaining problem is on the vehicle side: bitrate, CANH/
+CANL swapped at the connector, or the signal table.
+
+### On the bench, with a second node
 
 You need something to talk to. Options:
 

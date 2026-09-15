@@ -70,7 +70,9 @@ void setup()
 #endif
 
     CAN0.setCANPins(GPIO_CAN_RX, GPIO_CAN_TX);
-    CAN0.enable();
+    // begin() -> init() creates the RX queues and THEN calls enable(). Calling
+    // enable() here first starts the library's RX task against a null queue,
+    // which asserts inside xQueueReceive and boot-loops the board.
     CAN0.begin(cfg.canSpeed, 255);
     CAN0.setListenOnlyMode(cfg.canListenOnly);
     CAN0.watchFor();
